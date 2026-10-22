@@ -20,7 +20,7 @@
 <div class="container mt-4">
     <div class="card shadow-sm p-4">
         <h3 class="mb-2">🏆 全校成績排行榜</h3>
-        <p class="text-muted">（設為「不公開」者之成績仍會參與全校排名計算，但個人細節不會顯示於榜單上）</p>
+        <p class="text-muted">（設為「不公開」者仍會保留名次區塊以維護名次連續性，但個人資訊與分數將隱藏）</p>
         
         <table class="table table-hover mt-3">
             <thead class="table-dark">
@@ -41,22 +41,25 @@
 <script>
 async function fetchRankings() {
     const res = await fetch('/api/rankings');
-    const publicList = await res.json();
+    const list = await res.json();
     const tbody = document.getElementById('rankingTable');
     
-    if (publicList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center">目前無可顯示的公開成績資料</td></tr>';
+    if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">目前尚無完成所有科目填寫的成績資料</td></tr>';
         return;
     }
 
-    tbody.innerHTML = publicList.map(st => `
-        <tr>
-            <td><span class="badge ${st.rank === 1 ? 'bg-warning text-dark' : 'bg-secondary'} fs-6">第 ${st.rank} 名</span></td>
-            <td>${st.student_id}</td>
-            <td>${st.student_name}</td>
-            <td><strong>${st.weighted_avg}</strong> 分</td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = list.map(st => {
+        const isHidden = (st.student_name === '匿名學生');
+        return `
+            <tr class="${isHidden ? 'table-light text-muted' : ''}">
+                <td><span class="badge ${st.rank === 1 ? 'bg-warning text-dark' : (st.rank === 2 ? 'bg-secondary' : (st.rank === 3 ? 'bg-danger' : 'bg-dark'))} fs-6">第 ${st.rank} 名</span></td>
+                <td>${st.student_id}</td>
+                <td>${st.student_name}</td>
+                <td><strong>${st.weighted_avg}</strong></td>
+            </tr>
+        `;
+    }).join('');
 }
 
 fetchRankings();
