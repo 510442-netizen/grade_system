@@ -68,7 +68,7 @@ def init_db():
             ''')
             c.execute("SELECT COUNT(*) FROM subjects")
             if c.fetchone()[0] == 0:
-                default_subs = [("數學", 4.0), ("英文", 4.0), ("國文", 4.0), ("物理", 2.0), ("化學", 2.0)]
+                default_subs = [("數學", 4.0), ("英文", 4.0), ("國文", 4.0), ("物理", 2.0), ("地科", 2.0)]
                 c.executemany("INSERT INTO subjects (subject_name, weight) VALUES (?, ?)", default_subs)
             conn.commit()
     except Exception as e:
