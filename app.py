@@ -314,23 +314,14 @@ def get_rankings():
                     "is_me": is_me
                 })
             else:
-                # 不公開者：若是「當事人自己」，後端單獨對他顯示資料並加上識別標籤
-                if is_me:
-                    all_rankings.append({
-                        "rank": current_rank,
-                        "student_id": st['student_id'],
-                        "student_name": f"{st['student_name']} (你 - 已設隱私)",
-                        "weighted_avg": f"{st['weighted_avg']} 分",
-                        "is_me": True
-                    })
-                else:
-                    all_rankings.append({
-                        "rank": current_rank,
-                        "student_id": "不公開",
-                        "student_name": "匿名學生",
-                        "weighted_avg": "不公開",
-                        "is_me": False
-                    })
+                # 不公開者：僅隱藏學號與姓名，加權平均分數照常顯示
+                all_rankings.append({
+                    "rank": current_rank,
+                    "student_id": st['student_id'] if is_me else "不公開",
+                    "student_name": f"{st['student_name']} (你 - 已設隱私)" if is_me else "匿名學生",
+                    "weighted_avg": f"{st['weighted_avg']} 分",  # <-- 改為顯示分數
+                    "is_me": is_me
+                })
 
         return jsonify(all_rankings)
 
