@@ -275,6 +275,8 @@ def handle_grades(student_id):
 
 @app.route('/api/rankings', methods=['GET'])
 def get_rankings():
+    current_user_id = session.get('student_id')  # 取得目前登入者的學號
+
     with get_db() as conn:
         query = '''
             SELECT 
@@ -301,21 +303,34 @@ def get_rankings():
                 current_rank = i + 1
                 last_avg = st['weighted_avg']
 
-            # 所有人均保留名次位置；不公開者遮蔽個人資訊
+            is_me = (current_user_id is not None and st['student_id'] == current_user_id)
+
             if st['is_public'] == 1:
                 all_rankings.append({
                     "rank": current_rank,
                     "student_id": st['student_id'],
-                    "student_name": st['student_name'],
-                    "weighted_avg": f"{st['weighted_avg']} 分"
+                    "student_name": st['student_name'] + (" (你)" if is_me else ""),
+                    "weighted_avg": f"{st['weighted_avg']} 分",
+                    "is_me": is_me
                 })
             else:
-                all_rankings.append({
-                    "rank": current_rank,
-                    "student_id": "不公開",
-                    "student_name": "匿名學生",
-                    "weighted_avg": "不公開"
-                })
+                # 不公開者：若是「當事人自己」，後端單獨對他顯示資料並加上識別標籤
+                if is_me:
+                    all_rankings.append({
+                        "rank": current_rank,
+                        "student_id": st['student_id'],
+                        "student_name": f"{st['student_name']} (你 - 已設隱私)",
+                        "weighted_avg": f"{st['weighted_avg']} 分",
+                        "is_me": True
+                    })
+                else:
+                    all_rankings.append({
+                        "rank": current_rank,
+                        "student_id": "不公開",
+                        "student_name": "匿名學生",
+                        "weighted_avg": "不公開",
+                        "is_me": False
+                    })
 
         return jsonify(all_rankings)
 
