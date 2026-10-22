@@ -11,19 +11,23 @@ from flask import Flask, render_template, request, jsonify, session
 
 app = Flask(__name__)
 
-# 安全讀取環境變數 (無硬編碼秘密資訊)
+# 安全讀取環境變數 (防範轉型錯誤)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "default_secret_key_change_me")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD", "").replace(" ", "")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL", "")
 
+try:
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+except ValueError:
+    SMTP_PORT = 587
+
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "school_grades.db")
 
-# 10 分鐘閒置寄信觸發 (600 秒)
+# 10 分鐘閒置設定 (600 秒)
 IDLE_THRESHOLD_SECONDS = 10 * 60
 last_activity_time = datetime.now()
 email_sent_for_idle = False
@@ -35,43 +39,46 @@ def get_db():
     return conn
 
 def init_db():
-    with get_db() as conn:
-        c = conn.cursor()
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS students (
-                student_id TEXT PRIMARY KEY,
-                student_name TEXT NOT NULL,
-                pin TEXT NOT NULL,
-                is_public INTEGER DEFAULT 1
-            )
-        ''')
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS subjects (
-                subject_name TEXT PRIMARY KEY,
-                weight REAL NOT NULL CHECK(weight > 0)
-            )
-        ''')
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS grades (
-                student_id TEXT NOT NULL,
-                subject_name TEXT NOT NULL,
-                score REAL NOT NULL CHECK(score >= 0 AND score <= 100),
-                PRIMARY KEY (student_id, subject_name),
-                FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
-                FOREIGN KEY (subject_name) REFERENCES subjects(subject_name) ON DELETE CASCADE
-            )
-        ''')
-        c.execute("SELECT COUNT(*) FROM subjects")
-        if c.fetchone()[0] == 0:
-            default_subs = [("數學", 4.0), ("英文", 4.0), ("國文", 4.0), ("物理", 2.0), ("化學", 2.0)]
-            c.executemany("INSERT INTO subjects (subject_name, weight) VALUES (?, ?)", default_subs)
-        conn.commit()
+    try:
+        with get_db() as conn:
+            c = conn.cursor()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS students (
+                    student_id TEXT PRIMARY KEY,
+                    student_name TEXT NOT NULL,
+                    pin TEXT NOT NULL,
+                    is_public INTEGER DEFAULT 1
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS subjects (
+                    subject_name TEXT PRIMARY KEY,
+                    weight REAL NOT NULL CHECK(weight > 0)
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS grades (
+                    student_id TEXT NOT NULL,
+                    subject_name TEXT NOT NULL,
+                    score REAL NOT NULL CHECK(score >= 0 AND score <= 100),
+                    PRIMARY KEY (student_id, subject_name),
+                    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+                    FOREIGN KEY (subject_name) REFERENCES subjects(subject_name) ON DELETE CASCADE
+                )
+            ''')
+            c.execute("SELECT COUNT(*) FROM subjects")
+            if c.fetchone()[0] == 0:
+                default_subs = [("數學", 4.0), ("英文", 4.0), ("國文", 4.0), ("物理", 2.0), ("化學", 2.0)]
+                c.executemany("INSERT INTO subjects (subject_name, weight) VALUES (?, ?)", default_subs)
+            conn.commit()
+    except Exception as e:
+        print(f"資料庫初始化失敗: {e}")
 
-init_db()
-
+# 在第一個 Request 進來前安全初始化資料庫，防止 Gunicorn 模組載入崩潰
 @app.before_request
-def update_last_activity():
+def update_last_activity_and_init():
     global last_activity_time, email_sent_for_idle
+    init_db()  # 確保表單已建立
     last_activity_time = datetime.now()
     email_sent_for_idle = False
 
@@ -103,7 +110,7 @@ def send_backup_email(json_str):
 
         body = (
             "管理者您好：\n\n"
-            "系統已偵測到連續 10 分鐘無人存取（即將進入休眠），已為您自動備份最新數據。\n"
+            "系統已偵測到連續 10 分鐘無人存取，已為您自動備份最新數據。\n"
             "若伺服器重置，請複製下方 JSON 內容至 /admin 後台貼上還原。\n\n"
             "=================== 備份 JSON 資料開始 ===================\n\n"
             f"{json_str}\n\n"
@@ -126,9 +133,12 @@ def idle_checker_thread():
         time.sleep(20)
         idle_seconds = (datetime.now() - last_activity_time).total_seconds()
         if idle_seconds >= IDLE_THRESHOLD_SECONDS and not email_sent_for_idle:
-            json_str = export_db_to_json_string()
-            send_backup_email(json_str)
-            email_sent_for_idle = True
+            try:
+                json_str = export_db_to_json_string()
+                send_backup_email(json_str)
+                email_sent_for_idle = True
+            except Exception as e:
+                print(f"背景備份任務出錯: {e}")
 
 threading.Thread(target=idle_checker_thread, daemon=True).start()
 
