@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>個人成績登記</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+        <a class="navbar-brand" href="#">🎓 學生成績系統</a>
+        <div>
+            <a class="btn btn-outline-light me-2 active" href="/input">成績填寫</a>
+            <a class="btn btn-outline-light me-2" href="/rankings">統計排行榜</a>
+            <a class="btn btn-outline-warning" href="/admin">管理後台</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4" style="max-width: 650px;">
+    <!-- 登入與註冊區塊 -->
+    <div id="authBox" class="card shadow-sm p-4">
+        <h4 id="authTitle" class="text-center mb-3">學生身分登入</h4>
+        <div class="mb-3">
+            <label class="form-label">學號</label>
+            <input type="text" id="studentId" class="form-control" placeholder="請輸入學號">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">通行密碼 (PIN)</label>
+            <input type="password" id="pin" class="form-control" placeholder="請輸入密碼">
+        </div>
+        <div id="registerFields" class="d-none">
+            <div class="mb-3">
+                <label class="form-label">姓名</label>
+                <input type="text" id="studentName" class="form-control" placeholder="請輸入姓名">
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="isPublic" checked>
+                <label class="form-check-label" for="isPublic">同意將個人成績與排名公開於排行榜</label>
+            </div>
+        </div>
+        <button id="btnSubmitAuth" class="btn btn-primary w-100 mb-2" onclick="handleAuth()">登入</button>
+        <button id="btnToggleReg" class="btn btn-outline-secondary w-100" onclick="toggleRegister()">切換至新用戶註冊</button>
+    </div>
+
+    <!-- 成績填寫區塊 -->
+    <div id="gradeBox" class="card shadow-sm p-4 d-none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 id="userTitle" class="m-0 text-primary"></h5>
+            <button class="btn btn-sm btn-outline-danger" onclick="logout()">登出</button>
+        </div>
+        <div class="alert alert-info py-2 fs-6">📌 必須完整填寫 5 個科目的成績才可送出採計。</div>
+        
+        <form id="gradeForm" onsubmit="saveGrades(event)">
+            <div id="subjectInputs" class="row g-3"></div>
+            <button type="submit" class="btn btn-success w-100 mt-4">儲存 / 覆蓋更新成績</button>
+        </form>
+    </div>
+</div>
+
+<script>
+let currentStudent = null;
+let isRegisterMode = false;
+
+function toggleRegister() {
+    isRegisterMode = !isRegisterMode;
+    document.getElementById('registerFields').classList.toggle('d-none', !isRegisterMode);
+    document.getElementById('authTitle').innerText = isRegisterMode ? '新用戶註冊' : '學生身分登入';
+    document.getElementById('btnSubmitAuth').innerText = isRegisterMode ? '註冊帳號' : '登入';
+    document.getElementById('btnToggleReg').innerText = isRegisterMode ? '返回登入' : '切換至新用戶註冊';
+}
+
+async function handleAuth() {
+    const student_id = document.getElementById('studentId').value.trim();
+    const pin = document.getElementById('pin').value.trim();
+    const student_name = document.getElementById('studentName').value.trim();
+    const is_public = document.getElementById('isPublic').checked;
+    
+    const action = isRegisterMode ? 'register' : 'login';
+    const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action, student_id, pin, student_name, is_public })
+    });
+    const data = await res.json();
+    
+    if (res.ok) {
+        if (isRegisterMode) {
+            alert(data.message);
+            toggleRegister();
+        } else {
+            currentStudent = data.student;
+            loadGradeForm();
+        }
+    } else {
+        alert(data.message);
+    }
+}
+
+async function loadGradeForm() {
+    document.getElementById('authBox').classList.add('d-none');
+    document.getElementById('gradeBox').classList.remove('d-none');
+    document.getElementById('userTitle').innerText = `學生：${currentStudent.student_name} (${currentStudent.student_id})`;
+    
+    const [subRes, gradeRes] = await Promise.all([
+        fetch('/api/subjects').then(r => r.json()),
+        fetch(`/api/grades/${currentStudent.student_id}`).then(r => r.json())
+    ]);
+
+    const existingMap = {};
+    gradeRes.forEach(g => existingMap[g.subject_name] = g.score);
+
+    const container = document.getElementById('subjectInputs');
+    container.innerHTML = subRes.map(sub => `
+        <div class="col-6">
+            <label class="form-label font-weight-bold">${sub.subject_name} (權重 ${sub.weight}) <span class="text-danger">*</span></label>
+            <input type="number" step="0.5" min="0" max="100" required
+                   class="form-control score-input" 
+                   data-subject="${sub.subject_name}" 
+                   placeholder="0 - 100 分"
+                   value="${existingMap[sub.subject_name] !== undefined ? existingMap[sub.subject_name] : ''}">
+        </div>
+    `).join('');
+}
+
+async function saveGrades(e) {
+    e.preventDefault();
+    const scores = {};
+    let missing = false;
+
+    document.querySelectorAll('.score-input').forEach(input => {
+        const val = input.value.trim();
+        if (val === '') missing = true;
+        scores[input.dataset.subject] = val;
+    });
+
+    if (missing) {
+        alert('請完整填寫所有科目的成績後再送出！');
+        return;
+    }
+
+    const res = await fetch(`/api/grades/${currentStudent.student_id}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ scores })
+    });
+    const data = await res.json();
+    alert(data.message);
+}
+
+async function logout() {
+    await fetch('/api/logout', { method: 'POST' });
+    currentStudent = null;
+    document.getElementById('authBox').classList.remove('d-none');
+    document.getElementById('gradeBox').classList.add('d-none');
+}
+</script>
+</body>
+</html>
