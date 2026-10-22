@@ -11,7 +11,7 @@ from flask import Flask, render_template, request, jsonify, session
 
 app = Flask(__name__)
 
-# 安全讀取環境變數 (防範轉型錯誤)
+# 安全讀取環境變數
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "default_secret_key_change_me")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
@@ -74,11 +74,10 @@ def init_db():
     except Exception as e:
         print(f"資料庫初始化失敗: {e}")
 
-# 在第一個 Request 進來前安全初始化資料庫，防止 Gunicorn 模組載入崩潰
 @app.before_request
 def update_last_activity_and_init():
     global last_activity_time, email_sent_for_idle
-    init_db()  # 確保表單已建立
+    init_db()
     last_activity_time = datetime.now()
     email_sent_for_idle = False
 
@@ -295,19 +294,30 @@ def get_rankings():
         
         current_rank = 0
         last_avg = None
-        public_rankings = []
+        all_rankings = []
 
         for i, st in enumerate(students):
             if st['weighted_avg'] != last_avg:
                 current_rank = i + 1
                 last_avg = st['weighted_avg']
-            st['rank'] = current_rank
 
+            # 所有人均保留名次位置；不公開者遮蔽個人資訊
             if st['is_public'] == 1:
-                del st['is_public']
-                public_rankings.append(st)
+                all_rankings.append({
+                    "rank": current_rank,
+                    "student_id": st['student_id'],
+                    "student_name": st['student_name'],
+                    "weighted_avg": f"{st['weighted_avg']} 分"
+                })
+            else:
+                all_rankings.append({
+                    "rank": current_rank,
+                    "student_id": "不公開",
+                    "student_name": "匿名學生",
+                    "weighted_avg": "不公開"
+                })
 
-        return jsonify(public_rankings)
+        return jsonify(all_rankings)
 
 @app.route('/api/admin/all_data', methods=['POST'])
 def admin_get_data():
