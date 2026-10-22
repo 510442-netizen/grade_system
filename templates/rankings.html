@@ -10,7 +10,7 @@
     <div class="container">
         <a class="navbar-brand" href="#">🎓 學生成績系統</a>
         <div>
-            <a class="btn btn-outline-light me-2" href="/input">成績填寫</a>
+            <a class="btn btn-outline-light me-2" href="/input">成績填寫 / 登入</a>
             <a class="btn btn-outline-light me-2 active" href="/rankings">統計排行榜</a>
             <a class="btn btn-outline-warning" href="/admin">管理後台</a>
         </div>
@@ -20,7 +20,9 @@
 <div class="container mt-4">
     <div class="card shadow-sm p-4">
         <h3 class="mb-2">🏆 全校成績排行榜</h3>
-        <p class="text-muted">（設為「不公開」者仍會保留名次區塊以維護名次連續性，但個人資訊與分數將隱藏）</p>
+        <p class="text-muted">
+            📌 說明：若有設定「不公開」者，其他人看只會顯示為「匿名學生」；<strong>若您已在系統登入，您自己的該列將會高亮顯現並標註 (你)</strong>。
+        </p>
         
         <table class="table table-hover mt-3">
             <thead class="table-dark">
@@ -50,10 +52,18 @@ async function fetchRankings() {
     }
 
     tbody.innerHTML = list.map(st => {
-        const isHidden = (st.student_name === '匿名學生');
+        // 如果是登入者本人，加上藍黃高亮樣式
+        const rowStyle = st.is_me 
+            ? 'table-warning fw-bold border border-warning' 
+            : (st.student_name === '匿名學生' ? 'table-light text-muted' : '');
+
         return `
-            <tr class="${isHidden ? 'table-light text-muted' : ''}">
-                <td><span class="badge ${st.rank === 1 ? 'bg-warning text-dark' : (st.rank === 2 ? 'bg-secondary' : (st.rank === 3 ? 'bg-danger' : 'bg-dark'))} fs-6">第 ${st.rank} 名</span></td>
+            <tr class="${rowStyle}">
+                <td>
+                    <span class="badge ${st.rank === 1 ? 'bg-warning text-dark' : (st.rank === 2 ? 'bg-secondary' : (st.rank === 3 ? 'bg-danger' : 'bg-dark'))} fs-6">
+                        第 ${st.rank} 名
+                    </span>
+                </td>
                 <td>${st.student_id}</td>
                 <td>${st.student_name}</td>
                 <td><strong>${st.weighted_avg}</strong></td>
