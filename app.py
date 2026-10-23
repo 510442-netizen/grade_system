@@ -197,12 +197,25 @@ def auth_student():
     if not student_id or not pin:
         return jsonify({"status": "error", "message": "請輸入學號與通行密碼"}), 400
 
+    # 設定允許的學號範圍
+    MIN_STUDENT_ID = 510430
+    MAX_STUDENT_ID = 510467
+
     with get_db() as conn:
         if action == 'register':
             student_name = data.get('student_name', '').strip()
             is_public = 1 if data.get('is_public', True) else 0
+
             if not student_name:
                 return jsonify({"status": "error", "message": "請輸入姓名"}), 400
+
+            # 🔹 新增：限制學號必須為數字且在 510430 ~ 510467 之間
+            if not student_id.isdigit() or not (MIN_STUDENT_ID <= int(student_id) <= MAX_STUDENT_ID):
+                return jsonify({
+                    "status": "error", 
+                    "message": f"註冊失敗：學號必須為數字，且範圍僅限 {MIN_STUDENT_ID} ~ {MAX_STUDENT_ID}！"
+                }), 400
+
             try:
                 conn.execute(
                     "INSERT INTO students (student_id, student_name, pin, is_public) VALUES (?, ?, ?, ?)",
@@ -222,6 +235,58 @@ def auth_student():
                 session['student_id'] = student['student_id']
                 return jsonify({"status": "success", "student": dict(student)})
             return jsonify({"status": "error", "message": "學號或通行密碼錯誤"}), 401
+
+        elif action == 'change_pin':
+            new_pin = data.get('new_pin', '').strip()
+            if not new_pin:
+                return jsonify({"status": "error", "message": "請輸入新通行密碼"}), 400
+            if len(new_pin) < 4:
+                return jsonify({"status": "error", "message": "新密碼長度至少需 4 位數"}), 400
+
+            student = conn.execute(
+                "SELECT student_id FROM students WHERE student_id = ? AND pin = ?",
+                (student_id, pin)
+            ).fetchone()
+            if not student:
+                return jsonify({"status": "error", "message": "學號或原通行密碼錯誤！"}), 401
+
+            conn.execute(
+                "UPDATE students SET pin = ? WHERE student_id = ?",
+                (new_pin, student_id)
+            )
+            conn.commit()
+            return jsonify({"status": "success", "message": "通行密碼修改成功！下次登入請使用新密碼。"})
+            
+# 🔹 新增：一鍵匯出完整 JSON 資料 (含學號、姓名、PIN 碼、公開狀態、成績)
+@app.route('/api/admin/export', methods=['POST'])
+def admin_export_data():
+    password = request.json.get('password', '') if request.json else ''
+    if password != ADMIN_PASSWORD:
+        return jsonify({"status": "error", "message": "管理者密碼不正確！"}), 403
+
+    json_str = export_db_to_json_string()
+    return jsonify({"status": "success", "data": json.loads(json_str)})
+
+# 🔹 新增：刪除特定學生及其所有成績
+@app.route('/api/admin/delete_student', methods=['POST'])
+def admin_delete_student():
+    req_data = request.json or {}
+    password = req_data.get('password', '')
+    student_id = req_data.get('student_id', '').strip()
+
+    if password != ADMIN_PASSWORD:
+        return jsonify({"status": "error", "message": "管理者密碼不正確！"}), 403
+
+    if not student_id:
+        return jsonify({"status": "error", "message": "請提供欲刪除的學號"}), 400
+
+    with get_db() as conn:
+        cursor = conn.execute("DELETE FROM students WHERE student_id = ?", (student_id,))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({"status": "error", "message": f"找不到學號 [{student_id}] 的學生資料！"}), 404
+
+    return jsonify({"status": "success", "message": f"已成功刪除學號 [{student_id}] 及其所有成績！"})
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
