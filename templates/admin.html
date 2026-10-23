@@ -2,122 +2,190 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>管理者後台</title>
+    <title>系統管理員後台</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
+
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
-        <a class="navbar-brand" href="#">⚙️ 後端管理頁面</a>
+        <a class="navbar-brand" href="#">⚙️ 後台管理系統</a>
         <div>
-            <a class="btn btn-outline-light me-2" href="/input">成績填寫</a>
+            <a class="btn btn-outline-light me-2" href="/input">成績填寫 / 登入</a>
             <a class="btn btn-outline-light me-2" href="/rankings">統計排行榜</a>
+            <a class="btn btn-warning active" href="/admin">管理後台</a>
         </div>
     </div>
 </nav>
 
-<div class="container mt-4" style="max-width: 900px;">
-    <!-- 密碼輸入區 -->
-    <div id="adminLogin" class="card p-4 shadow-sm">
-        <h4 class="mb-3">管理者權限驗證</h4>
-        <div class="input-group">
-            <input type="password" id="adminPass" class="form-control" placeholder="請輸入管理者密碼">
-            <button class="btn btn-primary" onclick="verifyAdmin()">登入後台</button>
+<div class="container mt-5 mb-5" style="max-width: 800px;">
+    <!-- 1. 一開始僅顯示：管理者權限驗證 -->
+    <div id="authCard" class="card shadow-sm p-4">
+        <h4 class="card-title text-center mb-3">🔑 管理者權限驗證</h4>
+        <div class="mb-3">
+            <label class="form-label">請輸入管理者密碼</label>
+            <input type="password" id="adminPassword" class="form-control" placeholder="請輸入管理者密碼" onkeypress="if(event.key==='Enter') verifyAndLoad()">
         </div>
+        <button class="btn btn-primary w-100" onclick="verifyAndLoad()">驗證密碼並登入後台</button>
     </div>
 
-    <!-- 管理者控制面板 -->
+    <!-- 2. 密碼驗證成功後才顯示的功能面板 (初始狀態隱藏) -->
     <div id="adminPanel" class="d-none">
-        <!-- JSON 備份恢復區塊 -->
-        <div class="card p-4 shadow-sm mb-4 border-warning">
-            <h4 class="text-warning-emphasis mb-2">🔄 資料恢復 (備份還原)</h4>
-            <p class="text-muted fs-6">請將備份信件中的 JSON 內容完整複製並貼入下方文字方塊，點擊按鈕即可重置並還原資料庫。</p>
-            <div class="mb-3">
-                <textarea id="restoreJsonInput" class="form-control font-monospace" rows="6" placeholder="請在此貼上完整 JSON 文字..."></textarea>
-            </div>
-            <button class="btn btn-warning w-100" onclick="restoreData()">立即覆蓋還原資料庫</button>
+        
+        <!-- 頂部功能區 (包含一鍵匯出按鈕) -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5>📊 系統資料管理</h5>
+            <button class="btn btn-success" onclick="exportJsonFile()">📥 一鍵匯出 JSON 備份檔</button>
         </div>
 
-        <!-- 全校數據列表區塊 -->
-        <div class="card p-4 shadow-sm">
-            <h4 class="mb-3">📊 所有人成績原始明細</h4>
-            <table class="table table-bordered table-striped">
-                <thead class="table-secondary">
-                    <tr>
-                        <th>學號</th>
-                        <th>姓名</th>
-                        <th>公開模式</th>
-                        <th>科目</th>
-                        <th>分數</th>
-                        <th>權重</th>
-                    </tr>
-                </thead>
-                <tbody id="rawDataTable"></tbody>
-            </table>
+        <!-- 學生資料表 (包含刪除特定人功能) -->
+        <div class="card shadow-sm p-4 mb-4">
+            <h5 class="card-title mb-3">👥 學生與成績明細</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>學號</th>
+                            <th>姓名</th>
+                            <th>PIN 碼</th>
+                            <th>公開</th>
+                            <th>科目</th>
+                            <th>分數</th>
+                            <th class="text-center" style="width: 90px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentDataTable">
+                        <tr><td colspan="7" class="text-center text-muted">載入中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 資料庫批次恢復區 -->
+        <div class="card shadow-sm p-4">
+            <h5 class="card-title text-danger mb-2">⚠️ 資料庫批次恢復 (JSON 備份還原)</h5>
+            <p class="text-muted small">將備份的 JSON 內容貼入下方文字方塊，可覆蓋還原資料庫。</p>
+            <textarea id="restoreJsonInput" class="form-control font-monospace mb-3" rows="6" placeholder="在此貼上完整的 JSON 數據..."></textarea>
+            <button class="btn btn-danger w-100" onclick="submitRestore()">覆蓋還原資料庫</button>
         </div>
     </div>
 </div>
 
 <script>
-let savedAdminPassword = '';
+let authenticatedPassword = '';
 
-async function verifyAdmin() {
-    savedAdminPassword = document.getElementById('adminPass').value;
+// 驗證密碼並載入後台內容
+async function verifyAndLoad() {
+    const password = document.getElementById('adminPassword').value.trim();
+    if (!password) { alert('請輸入管理者密碼'); return; }
+
     const res = await fetch('/api/admin/all_data', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ password: savedAdminPassword })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
     });
-    const data = await res.json();
+    const result = await res.json();
 
-    if (res.ok) {
-        document.getElementById('adminLogin').classList.add('d-none');
-        document.getElementById('adminPanel').classList.remove('d-none');
-        renderTable(data.data);
-    } else {
-        alert(data.message);
-    }
-}
-
-function renderTable(data) {
-    const tbody = document.getElementById('rawDataTable');
-    tbody.innerHTML = data.map(row => `
-        <tr>
-            <td>${row.student_id}</td>
-            <td>${row.student_name}</td>
-            <td>${row.is_public ? '<span class="text-success">公開</span>' : '<span class="text-danger">不公開</span>'}</td>
-            <td>${row.subject_name || '-'}</td>
-            <td>${row.score !== null ? row.score : '-'}</td>
-            <td>${row.weight || '-'}</td>
-        </tr>
-    `).join('');
-}
-
-async function restoreData() {
-    const restoreStr = document.getElementById('restoreJsonInput').value.trim();
-    if (!restoreStr) {
-        alert('請先貼上備份 JSON 資料！');
+    if (!res.ok) {
+        alert(result.message);
         return;
     }
 
-    if (!confirm('警告：此操作將清除目前資料庫並全面恢復為貼上的備份資料，確定繼續嗎？')) {
+    // 驗證成功：保存密碼並顯示後台面板
+    authenticatedPassword = password;
+    document.getElementById('authCard').classList.add('d-none');
+    document.getElementById('adminPanel').classList.remove('d-none');
+
+    renderTable(result.data);
+}
+
+// 渲染表格內容與獨立刪除按鈕
+function renderTable(data) {
+    const tbody = document.getElementById('studentDataTable');
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">目前資料庫無任何學生資料</td></tr>';
+        return;
+    }
+
+    let lastStudentId = '';
+    tbody.innerHTML = data.map(row => {
+        const isNewStudent = row.student_id !== lastStudentId;
+        lastStudentId = row.student_id;
+
+        return `
+            <tr>
+                <td><strong>${row.student_id}</strong></td>
+                <td>${row.student_name || ''}</td>
+                <td><code>${row.pin || '****'}</code></td>
+                <td><span class="badge ${row.is_public === 1 ? 'bg-success' : 'bg-secondary'}">${row.is_public === 1 ? '公開' : '隱藏'}</span></td>
+                <td>${row.subject_name || '-'}</td>
+                <td>${row.score !== null ? row.score + ' 分' : '-'}</td>
+                <td class="text-center">
+                    ${isNewStudent ? `<button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="deleteStudent('${row.student_id}', '${row.student_name}')">刪除</button>` : ''}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 一鍵下載 JSON 備份檔
+async function exportJsonFile() {
+    const res = await fetch('/api/admin/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: authenticatedPassword })
+    });
+    const result = await res.json();
+
+    if (!res.ok) { alert(result.message); return; }
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result.data, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `school_grades_backup_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+}
+
+// 刪除特定學生
+async function deleteStudent(studentId, studentName) {
+    if (!confirm(`確定要刪除學生【${studentName} (${studentId})】嗎？\n該生的所有成績紀錄將會被一併刪除且無法復原！`)) {
+        return;
+    }
+
+    const res = await fetch('/api/admin/delete_student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: authenticatedPassword, student_id: studentId })
+    });
+    const result = await res.json();
+    alert(result.message);
+
+    if (res.ok) {
+        verifyAndLoad(); // 重新整理表格數據
+    }
+}
+
+// 覆蓋還原資料庫
+async function submitRestore() {
+    const restore_data = document.getElementById('restoreJsonInput').value.trim();
+    if (!restore_data) { alert('請貼入 JSON 備份內容'); return; }
+
+    if (!confirm('⚠️ 警告：這將會完全覆蓋目前的資料庫，確定要繼續嗎？')) {
         return;
     }
 
     const res = await fetch('/api/admin/restore', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            password: savedAdminPassword,
-            restore_data: restoreStr
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: authenticatedPassword, restore_data })
     });
-    const data = await res.json();
-    alert(data.message);
+    const result = await res.json();
+    alert(result.message);
 
     if (res.ok) {
-        verifyAdmin();
-        document.getElementById('restoreJsonInput').value = '';
+        verifyAndLoad();
     }
 }
 </script>
