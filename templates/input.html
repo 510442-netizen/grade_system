@@ -2,146 +2,269 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>個人成績登記</title>
+    <title>成績填寫與登入</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </head>
 <body class="bg-light">
+
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container">
         <a class="navbar-brand" href="#">🎓 學生成績系統</a>
         <div>
-            <a class="btn btn-outline-light me-2 active" href="/input">成績填寫</a>
+            <a class="btn btn-outline-light me-2 active" href="/input">成績填寫 / 登入</a>
             <a class="btn btn-outline-light me-2" href="/rankings">統計排行榜</a>
             <a class="btn btn-outline-warning" href="/admin">管理後台</a>
         </div>
     </div>
 </nav>
 
-<div class="container mt-4" style="max-width: 650px;">
-    <!-- 登入與註冊區塊 -->
-    <div id="authBox" class="card shadow-sm p-4">
-        <h4 id="authTitle" class="text-center mb-3">學生身分登入</h4>
-        <div class="mb-3">
-            <label class="form-label">學號</label>
-            <input type="text" id="studentId" class="form-control" placeholder="請輸入學號">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">通行密碼 (PIN)</label>
-            <input type="password" id="pin" class="form-control" placeholder="請輸入密碼">
-        </div>
-        <div id="registerFields" class="d-none">
-            <div class="mb-3">
-                <label class="form-label">姓名</label>
-                <input type="text" id="studentName" class="form-control" placeholder="請輸入姓名">
-            </div>
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" id="isPublic" checked>
-                <label class="form-check-label" for="isPublic">同意將個人成績與排名公開於排行榜(未勾選則不公開姓名、學號)</label>
-            </div>
-        </div>
-        <button id="btnSubmitAuth" class="btn btn-primary w-100 mb-2" onclick="handleAuth()">登入</button>
-        <button id="btnToggleReg" class="btn btn-outline-secondary w-100" onclick="toggleRegister()">切換至新用戶註冊</button>
+<div class="container mt-4" style="max-width: 600px;">
+
+    <!-- 頂部靜態警示欄 -->
+    <div class="alert alert-warning alert-dismissible fade show shadow-sm" role="alert">
+        <strong>📢 系統公告：</strong> 舊用戶預設通行密碼已統一重置為 <strong>1234</strong>，登入後可隨時修改！
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
-    <!-- 成績填寫區塊 -->
-    <div id="gradeBox" class="card shadow-sm p-4 d-none">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 id="userTitle" class="m-0 text-primary"></h5>
-            <button class="btn btn-sm btn-outline-danger" onclick="logout()">登出</button>
-        </div>
-        <div class="alert alert-info py-2 fs-6">📌 必須完整填寫 5 個科目的成績才可送出採計。</div>
+    <!-- 登入 / 註冊 卡片 -->
+    <div id="authCard" class="card shadow-sm p-4">
+        <h4 id="authTitle" class="card-title text-center mb-3">學生身分登入</h4>
         
-        <form id="gradeForm" onsubmit="saveGrades(event)">
-            <div id="subjectInputs" class="row g-3"></div>
-            <button type="submit" class="btn btn-success w-100 mt-4">儲存 / 覆蓋更新成績</button>
+        <div class="mb-3">
+            <label class="form-label">學號</label>
+            <input type="text" id="authStudentId" class="form-control" placeholder="請輸入學號">
+        </div>
+
+        <div id="nameGroup" class="mb-3 d-none">
+            <label class="form-label">姓名</label>
+            <input type="text" id="authStudentName" class="form-control" placeholder="請輸入姓名">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">通行密碼 (PIN 碼)</label>
+            <input type="password" id="authPin" class="form-control" placeholder="預設為 1234（舊用戶）">
+        </div>
+
+        <div id="publicGroup" class="form-check mb-3 d-none">
+            <input class="form-check-input" type="checkbox" id="authIsPublic" checked>
+            <label class="form-check-label" for="authIsPublic">
+                同意將個人成績與排名公開於排行榜（未勾選將顯示為匿名）
+            </label>
+        </div>
+
+        <button id="authBtn" class="btn btn-primary w-100" onclick="handleAuth()">登入</button>
+
+        <div class="d-flex justify-content-between mt-3">
+            <a href="#" id="toggleAuthLink" onclick="toggleAuthMode(event)" class="text-decoration-none">切換至新用戶註冊</a>
+            <a href="#" data-bs-toggle="modal" data-bs-target="#changePinModal" class="text-secondary text-decoration-none">修改通行密碼</a>
+        </div>
+    </div>
+
+    <!-- 成績填寫卡片 (登入後顯示) -->
+    <div id="gradeCard" class="card shadow-sm p-4 d-none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4>📝 成績填寫 (<span id="userDisplayName"></span>)</h4>
+            <button class="btn btn-outline-danger btn-sm" onclick="logout()">登出</button>
+        </div>
+        <form id="gradeForm">
+            <div id="subjectsContainer">載入科目中...</div>
+            <button type="button" class="btn btn-success w-100 mt-3" onclick="submitGrades()">儲存成績數據</button>
         </form>
     </div>
 </div>
 
-<script>
-let currentStudent = null;
-let isRegisterMode = false;
+<!-- 1. 首次進入頁面的跳出公告視窗 (Modal) -->
+<div class="modal fade" id="announcementModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">📢 系統重要通知</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="fs-6">為配合系統維護與更新，若您先前已經完成註冊，您的預設通行密碼（PIN 碼）已統一調整為：</p>
+                <div class="text-center my-3">
+                    <span class="badge bg-danger fs-4 px-4 py-2">1234</span>
+                </div>
+                <p class="text-muted small mb-0">請先使用此密碼登入，登入後可隨時點擊「修改通行密碼」改為您的專屬密碼！</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary w-100" data-bs-dismiss="modal">我知道了，前往登入</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-function toggleRegister() {
+<!-- 2. 修改密碼視窗 (Modal) -->
+<div class="modal fade" id="changePinModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">🔐 修改通行密碼</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">學號</label>
+                    <input type="text" id="changeStudentId" class="form-control" placeholder="請輸入學號">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">原通行密碼（舊用戶預設為 1234）</label>
+                    <input type="password" id="changeOldPin" class="form-control" placeholder="請輸入舊密碼">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">新通行密碼</label>
+                    <input type="password" id="changeNewPin" class="form-control" placeholder="請輸入新密碼 (至少 4 位)">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitChangePin()">確認修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let isRegisterMode = false;
+let currentStudentId = '';
+
+// 頁面載入時跳出公告視窗
+window.onload = function() {
+    const annModal = new bootstrap.Modal(document.getElementById('announcementModal'));
+    annModal.show();
+    loadSubjects();
+};
+
+function toggleAuthMode(e) {
+    e.preventDefault();
     isRegisterMode = !isRegisterMode;
-    document.getElementById('registerFields').classList.toggle('d-none', !isRegisterMode);
     document.getElementById('authTitle').innerText = isRegisterMode ? '新用戶註冊' : '學生身分登入';
-    document.getElementById('btnSubmitAuth').innerText = isRegisterMode ? '註冊帳號' : '登入';
-    document.getElementById('btnToggleReg').innerText = isRegisterMode ? '返回登入' : '切換至新用戶註冊';
+    document.getElementById('authBtn').innerText = isRegisterMode ? '註冊帳號' : '登入';
+    document.getElementById('toggleAuthLink').innerText = isRegisterMode ? '切換至登入' : '切換至新用戶註冊';
+    document.getElementById('nameGroup').classList.toggle('d-none', !isRegisterMode);
+    document.getElementById('publicGroup').classList.toggle('d-none', !isRegisterMode);
+
+    // 切換註冊與登入時，動態更新密碼輸入框提示文字
+    document.getElementById('authPin').placeholder = isRegisterMode ? '請設定通行密碼 (PIN 碼)' : '預設為 1234（舊用戶）';
 }
 
 async function handleAuth() {
-    const student_id = document.getElementById('studentId').value.trim();
-    const pin = document.getElementById('pin').value.trim();
-    const student_name = document.getElementById('studentName').value.trim();
-    const is_public = document.getElementById('isPublic').checked;
+    const student_id = document.getElementById('authStudentId').value.trim();
+    const pin = document.getElementById('authPin').value.trim();
     
-    const action = isRegisterMode ? 'register' : 'login';
+    if (!student_id || !pin) {
+        alert('請填寫學號與通行密碼');
+        return;
+    }
+
+    const payload = {
+        action: isRegisterMode ? 'register' : 'login',
+        student_id: student_id,
+        pin: pin
+    };
+
+    if (isRegisterMode) {
+        payload.student_name = document.getElementById('authStudentName').value.trim();
+        payload.is_public = document.getElementById('authIsPublic').checked;
+    }
+
     const res = await fetch('/api/auth', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ action, student_id, pin, student_name, is_public })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
     });
     const data = await res.json();
-    
+
     if (res.ok) {
-        if (isRegisterMode) {
-            alert(data.message);
-            toggleRegister();
+        alert(data.message || '操作成功');
+        if (!isRegisterMode) {
+            currentStudentId = student_id;
+            document.getElementById('userDisplayName').innerText = `${data.student.student_name} (${data.student.student_id})`;
+            document.getElementById('authCard').classList.add('d-none');
+            document.getElementById('gradeCard').classList.remove('d-none');
+            loadUserGrades(student_id);
         } else {
-            currentStudent = data.student;
-            loadGradeForm();
+            toggleAuthMode(new Event('click'));
         }
     } else {
         alert(data.message);
     }
 }
 
-async function loadGradeForm() {
-    document.getElementById('authBox').classList.add('d-none');
-    document.getElementById('gradeBox').classList.remove('d-none');
-    document.getElementById('userTitle').innerText = `學生：${currentStudent.student_name} (${currentStudent.student_id})`;
+async function submitChangePin() {
+    const student_id = document.getElementById('changeStudentId').value.trim();
+    const old_pin = document.getElementById('changeOldPin').value.trim();
+    const new_pin = document.getElementById('changeNewPin').value.trim();
+
+    if (!student_id || !old_pin || !new_pin) {
+        alert('請完整填寫所有欄位');
+        return;
+    }
+
+    const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'change_pin',
+            student_id: student_id,
+            pin: old_pin,
+            new_pin: new_pin
+        })
+    });
+
+    const data = await res.json();
+    alert(data.message);
+
+    if (res.ok) {
+        const modalElement = document.getElementById('changePinModal');
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        modal.hide();
+        document.getElementById('changeStudentId').value = '';
+        document.getElementById('changeOldPin').value = '';
+        document.getElementById('changeNewPin').value = '';
+    }
+}
+
+async function loadSubjects() {
+    const res = await fetch('/api/subjects');
+    const subjects = await res.json();
+    const container = document.getElementById('subjectsContainer');
     
-    const [subRes, gradeRes] = await Promise.all([
-        fetch('/api/subjects').then(r => r.json()),
-        fetch(`/api/grades/${currentStudent.student_id}`).then(r => r.json())
-    ]);
-
-    const existingMap = {};
-    gradeRes.forEach(g => existingMap[g.subject_name] = g.score);
-
-    const container = document.getElementById('subjectInputs');
-    container.innerHTML = subRes.map(sub => `
-        <div class="col-6">
-            <label class="form-label font-weight-bold">${sub.subject_name} (權重 ${sub.weight}) <span class="text-danger">*</span></label>
-            <input type="number" step="0.5" min="0" max="100" required
-                   class="form-control score-input" 
-                   data-subject="${sub.subject_name}" 
-                   placeholder="0 - 100 分"
-                   value="${existingMap[sub.subject_name] !== undefined ? existingMap[sub.subject_name] : ''}">
+    container.innerHTML = subjects.map(s => `
+        <div class="mb-3">
+            <label class="form-label">${s.subject_name} (權重: ${s.weight})</label>
+            <input type="number" step="0.1" min="0" max="100" class="form-control score-input" data-subject="${s.subject_name}" placeholder="請輸入 0 ~ 100 分數">
         </div>
     `).join('');
 }
 
-async function saveGrades(e) {
-    e.preventDefault();
-    const scores = {};
-    let missing = false;
+async function loadUserGrades(student_id) {
+    const res = await fetch(`/api/grades/${student_id}`);
+    if (!res.ok) return;
+    const grades = await res.json();
+    
+    const inputs = document.querySelectorAll('.score-input');
+    inputs.forEach(input => {
+        const subName = input.getAttribute('data-subject');
+        const match = grades.find(g => g.subject_name === subName);
+        if (match) {
+            input.value = match.score;
+        }
+    });
+}
 
-    document.querySelectorAll('.score-input').forEach(input => {
-        const val = input.value.trim();
-        if (val === '') missing = true;
-        scores[input.dataset.subject] = val;
+async function submitGrades() {
+    const inputs = document.querySelectorAll('.score-input');
+    const scores = {};
+    inputs.forEach(input => {
+        scores[input.getAttribute('data-subject')] = input.value;
     });
 
-    if (missing) {
-        alert('請完整填寫所有科目的成績後再送出！');
-        return;
-    }
-
-    const res = await fetch(`/api/grades/${currentStudent.student_id}`, {
+    const res = await fetch(`/api/grades/${currentStudentId}`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scores })
     });
     const data = await res.json();
@@ -150,9 +273,7 @@ async function saveGrades(e) {
 
 async function logout() {
     await fetch('/api/logout', { method: 'POST' });
-    currentStudent = null;
-    document.getElementById('authBox').classList.remove('d-none');
-    document.getElementById('gradeBox').classList.add('d-none');
+    location.reload();
 }
 </script>
 </body>
